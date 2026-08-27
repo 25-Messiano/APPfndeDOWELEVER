@@ -47,3 +47,9 @@ Start: `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT`.
 ## Observacao importante
 
 Esta versao e propositalmente separada do RREO. Somente depois da validacao do modulo FNDE deve ser considerada a integracao em `APPrreufndeDOWELEVER`.
+
+## v0.2 - Municipio completo
+
+O modo recomendado agora e **Municipio completo - todas as entidades**. Ele faz a consulta sem limitar ao CNPJ da Prefeitura, usa a pagina-resumo municipal como fonte dos totais oficiais e percorre as entidades descobertas para manter a trilha de auditoria. Ao final, cria um ZIP unico com resumo, listas, detalhes e JSON de auditoria.
+
+No teste de Araci/BA 2025, a interface compara automaticamente os totais encontrados com o PDF de referencia e somente mostra validacao completa quando todos conferirem.
