@@ -1,0 +1,12 @@
+{
+  "app_name": "APPfndeDOWELEVER",
+  "version": "0.1.0",
+  "fonte_principal": "FNDE_LIBERACOES_LEGADO",
+  "ano_padrao": 2025,
+  "endpoints": [
+    "https://www.fnde.gov.br/pls/edw_fnde/internet_fnde.liberacoes_result_pc",
+    "https://www.fnde.gov.br/pls/simad/internet_fnde.liberacoes_result_pc"
+  ],
+  "salvar_html_bruto": true,
+  "salvar_metadados_json": true
+}
