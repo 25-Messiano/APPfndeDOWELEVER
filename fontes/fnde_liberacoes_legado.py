@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -7,6 +8,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 
 from core.nomes_arquivos import nome_html, slug
@@ -14,6 +17,7 @@ from core.validacao_html import validar_html
 from core.logger import log
 from database.db import registrar
 from cloud.storage import salvar as salvar_storage
+from pdf.gerador_pdf import gerar_pdf, validar_pdf_textual
 
 ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS = ROOT / "downloads"
@@ -228,7 +232,7 @@ def extrair_links_resultados(html: str, base_url: str = "") -> list[str]:
 
 
 def validar_referencia_araci(ibge: str, ano: int, totais: list[dict]) -> dict:
-    if re.sub(r"\D", "", str(ibge)) != "2902708" or int(ano) != 2025:
+    if re.sub(r"\D", "", str(ibge)) != "2902104" or int(ano) != 2025:
         return {"aplicavel": False}
     consol = {}
     for item in totais:
@@ -255,11 +259,16 @@ class FndeLiberacoesLegado:
         self.endpoints = endpoints or DEFAULT_ENDPOINTS
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": os.getenv("FNDE_USER_AGENT", "APPfndeDOWELEVER/0.2"),
+            "User-Agent": os.getenv("FNDE_USER_AGENT", "APPfndeDOWELEVER/0.6.0"),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.5",
             "Connection": "keep-alive",
         })
+        retry = Retry(total=3, connect=3, read=3, backoff_factor=0.8,
+                      status_forcelist=(429, 500, 502, 503, 504), allowed_methods=frozenset(["GET"]))
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         self.timeout = int(os.getenv("FNDE_TIMEOUT", "60"))
 
     def _params(self, ano, uf, ibge=None, cnpj=None, programa="", tp_entidade=""):
@@ -372,6 +381,23 @@ class FndeLiberacoesLegado:
             detalhes.append({"cnpj": cnpj, "programa": programa, "tp_entidade": tp, "status": "OK", "arquivo": str(arq_det), "totais": det.get("totais_programas", [])})
 
         validacao_ref = validar_referencia_araci(ibge, ano, resumo.get("totais_programas", []))
+
+        # PDF textual: apresentação humana gerada a partir do resumo estruturado.
+        pdf_path = DOWNLOADS / f"FNDE_{ano}_{ibge}_{slug(municipio)}_{uf.upper()}.pdf"
+        pdf_info = gerar_pdf(ibge=ibge, municipio=municipio, uf=uf.upper(), ano=ano,
+                             programas=resumo.get("totais_programas", []), destino=pdf_path)
+        pdf_validacao = validar_pdf_textual(str(pdf_path), [str(ibge), str(municipio)])
+        salvar_storage(pdf_path)
+
+        def sha256(path):
+            h = hashlib.sha256()
+            with Path(path).open("rb") as f:
+                for bloco in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(bloco)
+            return h.hexdigest()
+
+        status_validacao = "VALIDADO" if (not validacao_ref.get("aplicavel") or validacao_ref.get("ok")) and pdf_validacao.get("ok") else "PENDENTE_CONFERENCIA"
+
         meta = {
             "baixado_em": datetime.now().isoformat(timespec="seconds"),
             "fonte": self.nome,
@@ -388,13 +414,22 @@ class FndeLiberacoesLegado:
             "quantidade_entidades_descobertas": len(entidades),
             "detalhes": detalhes,
             "paginas_intermediarias": paginas,
+            "status_validacao": status_validacao,
+            "pdf": {
+                "arquivo": str(pdf_path),
+                "engine": pdf_info.get("engine"),
+                "validacao_textual": {k:v for k,v in pdf_validacao.items() if k != "texto"},
+                "sha256": sha256(pdf_path),
+                "template_version": "0.6.0",
+            },
+            "hashes": {"html_resumo_sha256": sha256(arq_resumo)},
         }
         meta_path = arq_resumo.with_suffix(".json")
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
         # Pacote unico da rodada: resumo + listas + detalhes + auditoria.
         zip_path = DOWNLOADS / f"FNDE_{ibge}_{slug(municipio)}_{uf.upper()}_{ano}_PACOTE_COMPLETO.zip"
-        arquivos_rodada = [arq_resumo, meta_path]
+        arquivos_rodada = [arq_resumo, meta_path, pdf_path]
         arquivos_rodada += [Path(x["arquivo"]) for x in paginas if x.get("arquivo")]
         arquivos_rodada += [Path(x["arquivo"]) for x in detalhes if x.get("arquivo")]
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -406,7 +441,7 @@ class FndeLiberacoesLegado:
         salvar_storage(zip_path)
 
         registrar(ibge=ibge, municipio=municipio, uf=uf, ano=ano, cnpj="", fonte=self.nome,
-                  endpoint=resumo.get("endpoint", ""), arquivo=str(arq_resumo), status="OK",
+                  endpoint=resumo.get("endpoint", ""), arquivo=str(arq_resumo), status=status_validacao,
                   http_status=resumo.get("http_status"), tamanho_bytes=resumo["validacao"]["tamanho_bytes"],
                   detalhe=json.dumps({"modo":"MUNICIPIO_COMPLETO","entidades":len(entidades),"validacao_ref":validacao_ref}, ensure_ascii=False))
 
@@ -415,6 +450,7 @@ class FndeLiberacoesLegado:
             "modo": "MUNICIPIO_COMPLETO",
             "arquivo": str(arq_resumo),
             "metadados": str(meta_path),
+            "pdf": str(pdf_path),
             "pacote_zip": str(zip_path),
             "endpoint": resumo.get("endpoint"),
             "http_status": resumo.get("http_status"),
@@ -424,6 +460,8 @@ class FndeLiberacoesLegado:
             "quantidade_entidades_descobertas": len(entidades),
             "detalhes_baixados": len([x for x in detalhes if x.get("status") == "OK"]),
             "detalhes": detalhes,
+            "status_validacao": status_validacao,
+            "diagnostico": {"pdf_engine": pdf_info.get("engine"), "pdf_erro_playwright": pdf_info.get("erro_playwright"), "pdf_validacao": {k:v for k,v in pdf_validacao.items() if k != "texto"}},
         }
 
     def baixar(self, *, ano, uf, ibge, municipio, cnpj=None):

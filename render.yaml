@@ -3,10 +3,14 @@ services:
     name: appfndedowelever
     runtime: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python -m playwright install chromium
     startCommand: streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
     envVars:
       - key: STORAGE_BACKEND
         value: local
       - key: FNDE_TIMEOUT
         value: 60
+      - key: FNDE_MAX_ENTIDADES
+        value: 500
+      - key: PDF_ENGINE
+        value: playwright

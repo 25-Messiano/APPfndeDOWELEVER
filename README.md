@@ -1,55 +1,44 @@
-# APPfndeDOWELEVER
+# APPfndeDOWELEVER 0.6.0
 
-Aplicativo separado para localizar e baixar evidencias/arquivos oficiais do FNDE sem modificar o app RREO existente.
+Aplicativo independente para consultar liberações oficiais do FNDE, preservar evidências, consolidar os totais do município e produzir um PDF textual no padrão visual do documento de referência.
 
-## Primeira meta
+## Fluxo
 
-Validar Araci/BA, ano 2025, usando a consulta legada de Liberacoes do FNDE.
+FNDE -> HTML bruto -> identificação municipal -> extração -> JSON de auditoria -> validação -> HTML/CSS de impressão -> Chromium -> PDF textual -> pacote ZIP.
 
-## O que o app salva
+## Identificação
 
-- HTML bruto retornado pelo FNDE;
-- JSON de metadados/auditoria;
-- historico SQLite;
-- opcionalmente copia para S3.
+A identificação usa dois parâmetros complementares:
 
-## Fonte principal
+1. **externo**: nome do arquivo / IBGE / município / UF;
+2. **interno**: conteúdo do documento para confirmação e auditoria.
 
-`FNDE_LIBERACOES_LEGADO`
+A base `data/municipios_brasil.json` contém 5.570 municípios e é a referência para IBGE, nome, UF e código FNDE de seis dígitos.
 
-Endpoints configurados com fallback:
+Araci/BA: `2902104 -> 290210`.
 
-- `https://www.fnde.gov.br/pls/edw_fnde/internet_fnde.liberacoes_result_pc`
-- `https://www.fnde.gov.br/pls/simad/internet_fnde.liberacoes_result_pc`
+## PDF
 
-O app nao tenta contornar CAPTCHA. A rota SIGEF nova fica apenas documentada como fallback manual.
+O motor principal é Playwright/Chromium, usando:
 
-## Executar localmente
+- `templates/fnde_sigef_print.html`
+- `static/fnde_sigef_print.css`
+- `referencias/FNDE_MODELO_OFICIAL_ARACI_2025.pdf`
 
-```bash
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Teste de linha de comando
-
-```bash
-python scripts/testar_araci.py
-```
+Se Chromium não iniciar, existe fallback textual em ReportLab. O JSON de auditoria registra qual motor foi usado.
 
 ## Render
 
-O projeto inclui `render.yaml`. Build: `pip install -r requirements.txt`.
-Start: `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT`.
+O `render.yaml` instala as dependências Python e o Chromium do Playwright no build. A versão do Python permanece livre, seguindo a configuração atual do projeto.
 
-## Observacao importante
+## Confiabilidade
 
-Esta versao e propositalmente separada do RREO. Somente depois da validacao do modulo FNDE deve ser considerada a integracao em `APPrreufndeDOWELEVER`.
+Leia `docs/REGRAS_DE_CONFIABILIDADE.md`.
 
-## v0.2 - Municipio completo
+## Teste local repetido
 
-O modo recomendado agora e **Municipio completo - todas as entidades**. Ele faz a consulta sem limitar ao CNPJ da Prefeitura, usa a pagina-resumo municipal como fonte dos totais oficiais e percorre as entidades descobertas para manter a trilha de auditoria. Ao final, cria um ZIP unico com resumo, listas, detalhes e JSON de auditoria.
+```bash
+python scripts/selfcheck_10x.py
+```
 
-No teste de Araci/BA 2025, a interface compara automaticamente os totais encontrados com o PDF de referencia e somente mostra validacao completa quando todos conferirem.
+O script executa dez ciclos de regressão verificando base municipal, identificação, parser, referência de Araci e geração/extração de texto do PDF.

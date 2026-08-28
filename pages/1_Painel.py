@@ -2,67 +2,73 @@ from pathlib import Path
 import streamlit as st
 
 from core.downloader import baixar_fnde, baixar_fnde_municipio_completo
+from core.municipios import ufs, municipios_da_uf
 
 st.set_page_config(page_title="Painel FNDE", layout="wide")
 st.title("Painel FNDE")
+st.caption("Consulta municipal completa, auditoria e PDF textual no padrão visual FNDE/SIGEF.")
+
+lista_ufs = ufs()
+idx_ba = lista_ufs.index("BA") if "BA" in lista_ufs else 0
+uf = st.selectbox("UF", lista_ufs, index=idx_ba)
+lista_m = municipios_da_uf(uf)
+nomes = [m["municipio"] for m in lista_m]
+idx_araci = nomes.index("Araci") if uf == "BA" and "Araci" in nomes else 0
+municipio_nome = st.selectbox("Município", nomes, index=idx_araci)
+registro = next(m for m in lista_m if m["municipio"] == municipio_nome)
 
 c1, c2, c3 = st.columns(3)
 with c1:
-    ibge = st.text_input("Codigo IBGE", value="2902708", max_chars=7)
-    municipio = st.text_input("Municipio", value="Araci")
+    st.text_input("Código IBGE", value=registro["ibge"], disabled=True)
 with c2:
-    uf = st.text_input("UF", value="BA", max_chars=2)
-    ano = st.number_input("Ano", min_value=2000, max_value=2100, value=2025, step=1)
+    st.text_input("Código FNDE (6 dígitos)", value=registro["codigo_fnde_6"], disabled=True)
 with c3:
-    modo = st.selectbox("Modo de download", ["Municipio completo - todas as entidades", "CNPJ especifico"])
-    cnpj = st.text_input("CNPJ", value="14.232.086/0001-92", disabled=modo.startswith("Municipio completo"))
+    ano = st.number_input("Ano", min_value=2000, max_value=2100, value=2025, step=1)
 
-st.caption("Para obter os mesmos totais da consulta geral/PDF, use 'Municipio completo - todas as entidades'. O CNPJ da Prefeitura nao representa sozinho todos os repasses do municipio.")
+modo = st.selectbox("Modo de download", ["Município completo - todas as entidades", "CNPJ específico"])
+cnpj = st.text_input("CNPJ", value="", disabled=modo.startswith("Município completo"))
 
-if st.button("Baixar arquivo FNDE", type="primary"):
-    with st.spinner("Consultando FNDE e percorrendo as entidades..."):
-        if modo.startswith("Municipio completo"):
-            res = baixar_fnde_municipio_completo(ibge.strip(), municipio.strip(), uf.strip(), int(ano))
+st.info("O nome/IBGE da base municipal orienta o roteamento. O conteúdo interno confirma a identidade e divergências são registradas, não descartadas silenciosamente.")
+
+if st.button("Baixar e gerar PDF FNDE", type="primary"):
+    with st.spinner("Consultando FNDE, percorrendo entidades e gerando auditoria..."):
+        if modo.startswith("Município completo"):
+            res = baixar_fnde_municipio_completo(registro["ibge"], registro["municipio"], registro["uf"], int(ano))
         else:
-            res = baixar_fnde(ibge.strip(), municipio.strip(), uf.strip(), int(ano), cnpj.strip())
+            res = baixar_fnde(registro["ibge"], registro["municipio"], registro["uf"], int(ano), cnpj.strip())
     if res.get("ok"):
-        st.success("Consulta FNDE concluida com sucesso.")
-        st.write("Modo:", res.get("modo", "CNPJ_ESPECIFICO"))
-        st.write("Endpoint:", res.get("endpoint"))
-        st.write("HTTP:", res.get("http_status"))
-        st.write("Arquivo principal:", res.get("arquivo"))
-        st.write("Metadados:", res.get("metadados"))
-        if res.get("quantidade_entidades_descobertas") is not None:
-            st.metric("Entidades descobertas", res.get("quantidade_entidades_descobertas"))
-            st.metric("Detalhes baixados", res.get("detalhes_baixados", 0))
+        st.success("Consulta FNDE concluída.")
+        cols = st.columns(4)
+        cols[0].metric("Entidades descobertas", res.get("quantidade_entidades_descobertas", 0))
+        cols[1].metric("Detalhes baixados", res.get("detalhes_baixados", 0))
+        cols[2].metric("HTTP", res.get("http_status", "-"))
+        cols[3].metric("Status", res.get("status_validacao", "COLETADO"))
 
         totais = res.get("totais_programas", [])
         if totais:
-            st.subheader("Totais oficiais por programa - pagina resumo do municipio")
+            st.subheader("Totais municipais encontrados")
             st.dataframe(totais, use_container_width=True)
 
         ref = res.get("validacao_referencia", {})
         if ref.get("aplicavel"):
-            st.subheader("Conferencia com o PDF de referencia - Araci/BA 2025")
-            linhas = []
-            for programa, item in ref.get("comparacao", {}).items():
-                linhas.append({"Programa": programa, "Esperado": item.get("esperado"), "Encontrado": item.get("encontrado"), "Confere": item.get("confere")})
+            st.subheader("Validação - Araci/BA 2025")
+            linhas = [{"Programa": k, **v} for k, v in ref.get("comparacao", {}).items()]
             st.dataframe(linhas, use_container_width=True)
             if ref.get("ok"):
-                st.success("Todos os totais conferem com o PDF de referencia.")
+                st.success("Referência de Araci conferiu integralmente.")
             else:
-                st.warning("Ainda existe divergencia. O arquivo foi mantido para auditoria; nao considerar validado enquanto houver diferenca.")
+                st.warning("Existe divergência. O material foi preservado para auditoria e não deve ser tratado como validado.")
 
-        st.json(res.get("validacao", {}))
-        caminho = Path(res["arquivo"])
-        if caminho.exists():
-            st.download_button("Baixar HTML principal para o computador", data=caminho.read_bytes(), file_name=caminho.name, mime="text/html")
-        meta = Path(res.get("metadados", ""))
-        if meta.exists():
-            st.download_button("Baixar JSON de auditoria", data=meta.read_bytes(), file_name=meta.name, mime="application/json")
-        pacote = Path(res.get("pacote_zip", ""))
-        if pacote.exists():
-            st.download_button("Baixar pacote completo do municipio", data=pacote.read_bytes(), file_name=pacote.name, mime="application/zip")
+        for chave, rotulo, mime in [
+            ("pdf", "Baixar PDF textual", "application/pdf"),
+            ("arquivo", "Baixar HTML principal", "text/html"),
+            ("metadados", "Baixar JSON de auditoria", "application/json"),
+            ("pacote_zip", "Baixar pacote completo", "application/zip"),
+        ]:
+            caminho = Path(res.get(chave, ""))
+            if caminho.exists():
+                st.download_button(rotulo, data=caminho.read_bytes(), file_name=caminho.name, mime=mime, key=chave)
+        st.expander("Diagnóstico técnico").json(res.get("diagnostico", res.get("validacao", {})))
     else:
-        st.error("A consulta nao retornou um HTML FNDE validado.")
+        st.error("A consulta não retornou uma página FNDE validada.")
         st.json(res)
