@@ -1,0 +1,32 @@
+{
+  "app_name": "APPfndeDOWELEVER",
+  "version": "0.6.1",
+  "fonte_principal": "FNDE_LIBERACOES_LEGADO",
+  "modo_consulta": "MUNICIPIO_COMPLETO",
+  "ano_padrao": 2025,
+  "identificacao": {
+    "parametro_externo": "NOME_ARQUIVO",
+    "parametro_interno": "CONTEUDO_DOCUMENTO",
+    "base_municipios": "data/municipios_brasil.json",
+    "tolerar_variacao_grafia": true,
+    "bloquear_por_divergencia_leve": false,
+    "registrar_divergencia": true
+  },
+  "endpoints": [
+    "https://www.fnde.gov.br/pls/edw_fnde/internet_fnde.liberacoes_result_pc",
+    "https://www.fnde.gov.br/pls/simad/internet_fnde.liberacoes_result_pc"
+  ],
+  "salvar_html_bruto": true,
+  "salvar_metadados_json": true,
+  "salvar_pdf_textual": true,
+  "percorrer_todas_entidades": true,
+  "validar_totais_municipais": true,
+  "pdf": {
+    "engine_principal": "playwright_chromium",
+    "fallback": "reportlab",
+    "template": "templates/fnde_sigef_print.html",
+    "css": "static/fnde_sigef_print.css",
+    "referencia_visual": "referencias/FNDE_MODELO_OFICIAL_ARACI_2025.pdf"
+  },
+  "documento_mestre": "docs/DOCUMENTO_MESTRE_APPfndeDOWELEVER.md"
+}
