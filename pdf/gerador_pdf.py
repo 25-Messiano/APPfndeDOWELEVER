@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from jinja2 import Template
+from supervisao.supervisor import supervised
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "templates" / "fnde_sigef_print.html"
@@ -72,6 +73,7 @@ def _reportlab_pdf(*, ibge, municipio, uf, ano, programas, destino: Path):
     doc.build(story)
 
 
+@supervised("FNDE", "gerar_pdf")
 def gerar_pdf(*, ibge, municipio, uf, ano, programas, destino):
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -92,6 +94,7 @@ def gerar_pdf(*, ibge, municipio, uf, ano, programas, destino):
     return {"arquivo": str(destino), "engine": usado, "erro_playwright": erro_playwright, "html": html}
 
 
+@supervised("FNDE", "validar_pdf_textual")
 def validar_pdf_textual(caminho: str, termos=None):
     from pypdf import PdfReader
     reader = PdfReader(caminho)
@@ -99,3 +102,4 @@ def validar_pdf_textual(caminho: str, termos=None):
     termos = termos or []
     faltantes = [t for t in termos if t not in texto]
     return {"ok": len(reader.pages) >= 1 and bool(texto.strip()) and not faltantes, "paginas": len(reader.pages), "caracteres": len(texto), "faltantes": faltantes, "texto": texto}
+

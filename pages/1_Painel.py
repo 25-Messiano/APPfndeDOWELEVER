@@ -3,10 +3,19 @@ import streamlit as st
 
 from core.downloader import baixar_fnde, baixar_fnde_municipio_completo
 from core.municipios import ufs, municipios_da_uf
+from supervisao.supervisor import SupervisorAIPaused
+from supervisao.supervisor_auto import status as supervisor_status
 
 st.set_page_config(page_title="Painel FNDE", layout="wide")
 st.title("Painel FNDE")
 st.caption("Consulta municipal completa, auditoria e PDF textual no padrão visual FNDE/SIGEF.")
+supervisao = supervisor_status()
+if supervisao["automatica"]:
+    st.info("A IA confere cada etapa. Sem acesso ou saldo na API, a operação pausa para conferência.")
+    if not supervisao["chave_configurada"]:
+        st.warning("PAUSADO POR IA: configure a chave da API neste serviço do Render.")
+else:
+    st.warning("Supervisão por IA desativada neste serviço.")
 
 lista_ufs = ufs()
 idx_ba = lista_ufs.index("BA") if "BA" in lista_ufs else 0
@@ -32,10 +41,15 @@ st.info("O nome/IBGE da base municipal orienta o roteamento. O conteúdo interno
 
 if st.button("Baixar e gerar PDF FNDE", type="primary"):
     with st.spinner("Consultando FNDE, percorrendo entidades e gerando auditoria..."):
-        if modo.startswith("Município completo"):
-            res = baixar_fnde_municipio_completo(registro["ibge"], registro["municipio"], registro["uf"], int(ano))
-        else:
-            res = baixar_fnde(registro["ibge"], registro["municipio"], registro["uf"], int(ano), cnpj.strip())
+        try:
+            if modo.startswith("Município completo"):
+                res = baixar_fnde_municipio_completo(registro["ibge"], registro["municipio"], registro["uf"], int(ano))
+            else:
+                res = baixar_fnde(registro["ibge"], registro["municipio"], registro["uf"], int(ano), cnpj.strip())
+        except SupervisorAIPaused as exc:
+            st.warning(str(exc))
+            st.info("A operação foi interrompida. Consulte a auditoria antes de tentar novamente; arquivos já gerados podem existir.")
+            st.stop()
     if res.get("ok"):
         st.success("Consulta FNDE concluída.")
         cols = st.columns(4)
@@ -72,3 +86,4 @@ if st.button("Baixar e gerar PDF FNDE", type="primary"):
     else:
         st.error("A consulta não retornou uma página FNDE validada.")
         st.json(res)
+
