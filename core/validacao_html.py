@@ -1,8 +1,10 @@
 from bs4 import BeautifulSoup
+from supervisao.supervisor import supervised
 
 MARCADORES = ["FNDE", "LIBERA", "MUNIC", "ENTIDADE", "PROGRAMA", "VALOR"]
 
 
+@supervised("FNDE", "validar_html")
 def validar_html(html: str) -> dict:
     texto = BeautifulSoup(html or "", "html.parser").get_text(" ", strip=True)
     texto_up = texto.upper()
@@ -15,3 +17,4 @@ def validar_html(html: str) -> dict:
         "captcha_detectado": captcha,
         "titulo": BeautifulSoup(html or "", "html.parser").title.string.strip() if BeautifulSoup(html or "", "html.parser").title and BeautifulSoup(html or "", "html.parser").title.string else ""
     }
+

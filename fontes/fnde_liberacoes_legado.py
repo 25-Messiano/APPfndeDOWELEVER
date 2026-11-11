@@ -18,6 +18,7 @@ from core.logger import log
 from database.db import registrar
 from cloud.storage import salvar as salvar_storage
 from pdf.gerador_pdf import gerar_pdf, validar_pdf_textual
+from supervisao.supervisor import supervised, SupervisorAIPaused
 
 ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS = ROOT / "downloads"
@@ -79,6 +80,7 @@ def classificar_programa(titulo: str) -> str:
     return slug(t)[:80]
 
 
+@supervised("FNDE", "extrair_totais_programas")
 def extrair_totais_programas(html: str) -> list[dict]:
     """Extrai cada bloco/tabela e o respectivo total mostrado pelo FNDE."""
     soup = BeautifulSoup(html or "", "html.parser")
@@ -282,6 +284,7 @@ class FndeLiberacoesLegado:
             "p_verifica": "sigef",
         }
 
+    @supervised("FNDE", "consultar_liberacoes")
     def consultar(self, *, ano, uf, ibge=None, cnpj=None, municipio="", programa="", tp_entidade=""):
         params = self._params(ano, uf, ibge, cnpj, programa, tp_entidade)
         tentativas = []
@@ -309,18 +312,22 @@ class FndeLiberacoesLegado:
                         "rotas_descoberta": extrair_rotas_descoberta(html),
                         "tentativas": tentativas,
                     }
+            except SupervisorAIPaused:
+                raise
             except Exception as exc:
                 ultimo_erro = repr(exc)
                 tentativas.append({"endpoint": endpoint, "erro": ultimo_erro})
                 log(f"erro endpoint={endpoint} erro={ultimo_erro}")
         return {"ok": False, "erro": ultimo_erro or "Nenhum endpoint retornou HTML validado", "tentativas": tentativas}
 
+    @supervised("FNDE", "salvar_html")
     def _salvar_html(self, html: str, nome: str):
         arq = DOWNLOADS / nome
         arq.write_text(html, encoding="utf-8")
         salvar_storage(arq)
         return arq
 
+    @supervised("FNDE", "coletar_entidades_e_pacote")
     def baixar_municipio_completo(self, *, ano, uf, ibge, municipio):
         """Baixa o resumo municipal e percorre programa/tipo/entidade encontrados.
 
@@ -464,6 +471,7 @@ class FndeLiberacoesLegado:
             "diagnostico": {"pdf_engine": pdf_info.get("engine"), "pdf_erro_playwright": pdf_info.get("erro_playwright"), "pdf_validacao": {k:v for k,v in pdf_validacao.items() if k != "texto"}},
         }
 
+    @supervised("FNDE", "coletar_liberacoes")
     def baixar(self, *, ano, uf, ibge, municipio, cnpj=None):
         # CNPJ informado mantem compatibilidade com a versao antiga; vazio usa municipio completo.
         if not limpar_cnpj(cnpj):
@@ -492,3 +500,4 @@ class FndeLiberacoesLegado:
                   tamanho_bytes=res["validacao"]["tamanho_bytes"], detalhe=destino)
         res.update({"arquivo": str(arq), "metadados": str(meta_path), "storage": destino})
         return res
+
