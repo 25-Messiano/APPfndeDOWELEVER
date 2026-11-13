@@ -22,7 +22,7 @@ from pathlib import Path
 _CURRENT = contextvars.ContextVar("app_supervisor", default=None)
 _LOCK = threading.RLock()
 SOURCES = {"BB", "TCM", "FNDE", "GERAL"}
-VERSION = "1.1"
+VERSION = "1.2.0"
 SECRET_RE = re.compile(r"sk-[A-Za-z0-9_-]+|Bearer\s+[A-Za-z0-9._-]+", re.I)
 PRIVATE_RE = re.compile(r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----", re.S)
 
@@ -302,6 +302,7 @@ def supervised(source, operation, guard=None):
             try:
                 _save(report)
                 _preflight(arguments, guard)
+                report["resumo"] = {"fase":"PRE_EXECUCAO", "contrato_previo":"APROVADO", "resultado_ainda_nao_produzido":True}
                 from .supervisor_auto import review_stage
                 review_stage(report, "ANTES")
                 result = func(*args, **kwargs)
@@ -311,7 +312,7 @@ def supervised(source, operation, guard=None):
                     report["identidade"].setdefault(k,v)
                 report["resumo"] = _summary(result)
                 report["alertas"] = sum(e["status"] in {"PENDENTE","BLOQUEADO","ERRO"} for e in report["etapas"])
-                report["status"] = "PENDENTE" if _pending(report["resumo"]) else "CONCLUIDO"
+                report["status"] = "PENDENTE" if (_pending(report["resumo"]) or report["alertas"]) else "CONCLUIDO"
                 review_stage(report, "DEPOIS")
                 return result
             except Exception as exc:
@@ -329,10 +330,10 @@ def supervised(source, operation, guard=None):
                 report["duracao_segundos"] = round(time.monotonic()-started,3)
                 _CURRENT.reset(token)
                 if parent is not None:
+                    persist_cloud(report)
                     parent["etapas"].append({k:report.get(k) for k in
-                        ("id","fonte","operacao","identidade","status","erro","resumo","duracao_segundos")})
+                        ("id","fonte","operacao","identidade","status","erro","resumo","duracao_segundos","objeto_auditoria")})
                     parent["etapas"] = parent["etapas"][-200:]
-                    report["auditoria_cloud"] = "AGREGADA"
                 else:
                     persist_cloud(report)
                 try:

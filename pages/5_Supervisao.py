@@ -6,6 +6,25 @@ from supervisao.supervisor_ai import advise, configured
 
 st.set_page_config(page_title="Supervisão FNDE", layout="wide")
 st.title("Supervisão FNDE")
+from supervisao.supervisor_agents import definition, connection_test
+team = definition()
+st.subheader('Equipe de três agentes')
+for role, spec in team['agentes'].items():
+    with st.expander(spec['nome']):
+        st.write(spec['identidade'])
+        st.write(spec['regra'])
+        st.table([{'Etapa': stage.title(), 'Responsabilidade': task} for stage, task in spec['tarefas'].items()])
+st.caption('Mesma chave da API. Planilhas preservadas, sem pintura; correções e pendências ficam na auditoria.')
+if st.button('Testar os três agentes', disabled=not configured()):
+    st.session_state.pop('teste_tres_agentes', None)
+    try:
+        with st.spinner('Conferindo três respostas reais da API...'):
+            st.session_state['teste_tres_agentes'] = connection_test()
+    except Exception as exc:
+        st.error(str(exc))
+if st.session_state.get('teste_tres_agentes'):
+    st.json(st.session_state['teste_tres_agentes'])
+st.caption('O teste dos três agentes consome três chamadas de diagnóstico; não inicia downloads nem altera planilhas.')
 st.json(status())
 st.caption("Histórico local de consultas, validação, extração, arquivos e geração de PDF. A presença da chave não comprova saldo nem uma chamada bem-sucedida.")
 
