@@ -185,6 +185,10 @@ def call_agent(role, context, opinions, *, opener=None):
                'max_output_tokens': 2500,
                'text': {'format': {'type': 'json_schema', 'name': 'parecer_' + role.lower(),
                                    'strict': True, 'schema': schema}}}
+    # Preserve the existing app's bounded reasoning setting for its default family.
+    # Other configured models do not receive an unsupported reasoning parameter.
+    if payload['model'] in {'gpt-5', 'gpt-5-mini', 'gpt-5-nano'}:
+        payload['reasoning'] = {'effort': 'minimal'}
     req = urllib.request.Request('https://api.openai.com/v1/responses',
         data=json.dumps(payload, ensure_ascii=False).encode(), method='POST',
         headers={'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY'], 'Content-Type': 'application/json'})
@@ -206,7 +210,10 @@ def call_agent(role, context, opinions, *, opener=None):
         if isinstance(exc, SupervisorBlocked):
             raise
         raise SupervisorBlocked('RESPOSTA_INVALIDA: parecer não passou na validação.') from None
+    usage = result.get('usage') or {}
     return {'agente': role, 'modelo': payload['model'], 'response_id': result.get('id'),
+            'uso_tokens': {k: usage[k] for k in ('input_tokens', 'output_tokens', 'total_tokens')
+                          if isinstance(usage.get(k), int)},
             'atualizado_em': datetime.now(timezone.utc).isoformat(), 'parecer': answer}
 
 
