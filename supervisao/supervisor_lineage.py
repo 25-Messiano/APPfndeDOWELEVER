@@ -79,9 +79,15 @@ def register_html(html, name='FNDE.html'):
     for tag in soup(['script', 'style']): tag.decompose()
     refs = []
     for index, row in enumerate(soup.find_all('tr'), 1):
+        # A container row may contain the entire report. Its leaf rows carry
+        # the actual evidence; including both would duplicate every payment.
+        if row.find('tr'):
+            continue
         text = row.get_text(' | ', strip=True)
-        if text:
-            refs.append(add_proof(documento=name, sha256=sha, local=f'linha HTML {index}', trecho=text))
+        for start in range(0, len(text), 1100):
+            refs.append(add_proof(documento=name, sha256=sha,
+                local=f'linha HTML {index}, caracteres {start+1}-{min(start+1100,len(text))}',
+                trecho=text[start:start+1100]))
     if not refs:
         text = soup.get_text(' ', strip=True)
         for index in range(0, len(text), 1100):

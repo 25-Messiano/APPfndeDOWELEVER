@@ -268,6 +268,14 @@ class TeamTests(unittest.TestCase):
         self.assertEqual(original, before)
         self.assertEqual(r['linhagem_celulas']['celulas'][0]['valor_anterior'],15000)
 
+    def test_nested_html_rows_are_not_duplicated_or_truncated(self):
+        r = report(); token = s._CURRENT.set(r)
+        rows = ''.join(f'<tr><td>Pagamento {i}</td><td>1.500,00</td></tr>' for i in range(60))
+        try: lineage.register_html('<table><tr><td><table>'+rows+'</table></td></tr></table>')
+        finally: s._CURRENT.reset(token)
+        self.assertEqual(len(r['provas']),60)
+        self.assertTrue(all('1.500,00' in p['trecho'] for p in r['provas']))
+
     def test_connection_test_calls_three_agents_without_motor(self):
         with patch.object(team,'call_agent',side_effect=self.reviewer): r = team.connection_test()
         self.assertEqual(len(self.calls),3)
