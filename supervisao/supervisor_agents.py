@@ -192,6 +192,12 @@ def call_agent(role, context, opinions, *, opener=None):
                     + spec['personalidade'] + '\nTAREFA: ' + spec['tarefas'][context['servico']]
                     + '\nREGRA: ' + spec['regra'] + '\nÓRGÃO: '
                     + MODULE_RULES.get(context['fonte'], MODULE_RULES['GERAL']))
+    if context.get('fase') == 'ANTES':
+        instructions = ('FASE PRÉ-EXECUÇÃO: julgue somente o contrato prévio e as entradas informadas. '
+            'Resultado final e etapas futuras ainda não existem. Ausência de resultado posterior, '
+            'por si só, NÃO é erro, lacuna ou divergência conceitual. Não exija resultados de um '
+            'processo ainda não executado. APROVADO nesta fase apenas permite executar a etapa; '
+            'não certifica conteúdo futuro. Bloqueie somente inconsistência concreta nas entradas.\n' + instructions)
     body = {'contexto': context, 'pareceres_anteriores': opinions}
     if choices is not None:
         body['catalogo_de_decisoes'] = choices
@@ -317,8 +323,17 @@ def connection_test():
                          'planilhas_alteradas': False, 'objetivo': 'Confirmar três respostas válidas da API; não certificar dados financeiros.'}}
     try:
         answer = review_team(report, 'ANTES')
-        report.update(status='CONCLUIDO' if answer['prioridade'] == 'normal' else 'PENDENTE',
-                      resultado=answer)
+        replies = report['equipe_agentes']['ANTES']['agentes']
+        if len(replies) != 3 or any(not isinstance(r.get('response_id'), str) or not r['response_id'] for r in replies.values()):
+            raise SupervisorBlocked('DIAGNOSTICO_INCOMPLETO: três respostas válidas da API não foram comprovadas.')
+        # Transport success is measured from actual validated API replies, not a
+        # financial opinion about documents which this diagnostic never processes.
+        report.update(status='CONCLUIDO', conexao_api={
+            'respostas_validas': len(replies), 'respostas_esperadas': 3,
+            'validacao_financeira_executada': False,
+            'respostas': {role: {'response_id': r['response_id'],
+                'sha256_parecer': hashlib.sha256(json.dumps(r['parecer'], sort_keys=True, ensure_ascii=False).encode()).hexdigest()}
+                for role, r in replies.items()}}, parecer_consultivo=answer)
         return report
     except Exception as exc:
         report['status'] = 'BLOQUEADO'

@@ -312,6 +312,16 @@ class TeamTests(unittest.TestCase):
         self.assertEqual(len(self.calls),3)
         self.assertFalse(r['resumo']['downloads_iniciados'])
         self.assertFalse(r['resumo']['planilhas_alteradas'])
+        self.assertEqual(r['conexao_api']['respostas_validas'],3)
+        self.assertFalse(r['conexao_api']['validacao_financeira_executada'])
+
+    def test_connection_success_does_not_override_financial_review(self):
+        def cautious(role, context, previous):
+            a=self.reviewer(role,context,previous);a['parecer']['veredito']='REVISAR';return a
+        with patch.object(team,'call_agent',side_effect=cautious): r=team.connection_test()
+        self.assertEqual(r['status'],'CONCLUIDO')
+        self.assertEqual(r['equipe_agentes']['ANTES']['status'],'REVISAR')
+        self.assertFalse(r['conexao_api']['validacao_financeira_executada'])
 
 
 if __name__ == '__main__': unittest.main()
