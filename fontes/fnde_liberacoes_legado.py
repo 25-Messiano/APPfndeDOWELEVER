@@ -83,6 +83,8 @@ def classificar_programa(titulo: str) -> str:
 @supervised("FNDE", "extrair_totais_programas")
 def extrair_totais_programas(html: str) -> list[dict]:
     """Extrai cada bloco/tabela e o respectivo total mostrado pelo FNDE."""
+    from supervisao.supervisor_lineage import register_html
+    register_html(html or "", "FNDE_liberacoes.html")
     soup = BeautifulSoup(html or "", "html.parser")
     saida = []
     vistos = set()
@@ -320,7 +322,7 @@ class FndeLiberacoesLegado:
                 log(f"erro endpoint={endpoint} erro={ultimo_erro}")
         return {"ok": False, "erro": ultimo_erro or "Nenhum endpoint retornou HTML validado", "tentativas": tentativas}
 
-    @supervised("FNDE", "salvar_html")
+    @supervised("FNDE", "entregar_html")
     def _salvar_html(self, html: str, nome: str):
         arq = DOWNLOADS / nome
         arq.write_text(html, encoding="utf-8")

@@ -14,7 +14,7 @@ urllib.request.urlopen=deny_network
 class AutomaticTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory()
-  self.env=patch.dict(os.environ,{'SUPERVISOR_AUTO_AI':'true','OPENAI_API_KEY':'dummy-no-network','SUPERVISOR_GCS_SYNC':'false','SUPERVISOR_DB_PATH':self.tmp.name+'/audit.sqlite','SUPERVISOR_AUTO_AI_DAILY_LIMIT':'0'})
+  self.env=patch.dict(os.environ,{'SUPERVISOR_AGENT_TEAM':'false','SUPERVISOR_AUTO_AI':'true','OPENAI_API_KEY':'dummy-no-network','SUPERVISOR_GCS_SYNC':'false','SUPERVISOR_DB_PATH':self.tmp.name+'/audit.sqlite','SUPERVISOR_AUTO_AI_DAILY_LIMIT':'0'})
   self.env.start();self.calls=[]
   auto._PAUSE_STATE.update(until=0.0,reason='')
  def tearDown(self):self.env.stop();self.tmp.cleanup()

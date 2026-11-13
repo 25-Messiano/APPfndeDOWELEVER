@@ -12,4 +12,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verificar supervisão sem credenciais nem rede
-        run: python -m unittest discover -s tests -p 'test*.py' -v
+        run: |
+          pip install 'pypdf>=5,<7' 'reportlab>=4.2,<5'
+          python -m unittest discover -s tests -p 'test*.py' -v
