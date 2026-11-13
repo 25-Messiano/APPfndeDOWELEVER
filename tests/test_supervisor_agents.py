@@ -201,6 +201,30 @@ class TeamTests(unittest.TestCase):
         with self.assertRaisesRegex(s.SupervisorBlocked, 'RESPOSTA_INCOMPLETA'):
             team.call_agent('TECNICO', {**report(),'servico':'BAIXAR'}, {}, opener=opener)
 
+    def test_coordinator_schema_only_allows_catalogued_selections(self):
+        sent = []
+        previous = {k:{'parecer':opinion()} for k in ('TECNICO','AUDITOR')}
+        def opener(req, **kwargs):
+            sent.append(json.loads(req.data))
+            return io.BytesIO(json.dumps({'status':'completed','output':[{'content':[{
+                'type':'output_text','text':json.dumps(opinion())}]}]}).encode())
+        team.call_agent('COORDENADOR', {**report(),'servico':'PROCESSAR'}, previous, opener=opener)
+        props = sent[0]['text']['format']['schema']['properties']
+        self.assertEqual(props['correcoes']['maxItems'], 0)
+        self.assertEqual(props['achados']['maxItems'], 0)
+
+    def test_coordinator_selection_restores_exact_original_proposal(self):
+        correction={'campo':'J11','antes':'15000','depois':'1500','regra':'OCR','evidencias':['operacao-1']}
+        previous={'TECNICO':{'parecer':opinion()},'AUDITOR':{'parecer':opinion()}}
+        previous['TECNICO']['parecer']['correcoes']=[correction]
+        def opener(req, **kwargs):
+            body=json.loads(json.loads(req.data)['input']); options=body['catalogo_de_decisoes']['correcoes']
+            a=opinion(verdict='REVISAR');a['correcoes']=[next(iter(options))]
+            return io.BytesIO(json.dumps({'status':'completed','output':[{'content':[{
+                'type':'output_text','text':json.dumps(a)}]}]}).encode())
+        a=team.call_agent('COORDENADOR',{**report(),'servico':'PROCESSAR'},previous,opener=opener)
+        self.assertEqual(a['parecer']['correcoes'],[correction])
+
     def test_large_context_is_not_silently_truncated(self):
         with self.assertRaisesRegex(s.SupervisorBlocked, 'EVIDENCIA_EXCEDE_LIMITE'):
             team.call_agent('TECNICO', {**report(),'servico':'BAIXAR','provas':[], 'x':'z'*56000}, {})
@@ -275,6 +299,13 @@ class TeamTests(unittest.TestCase):
         finally: s._CURRENT.reset(token)
         self.assertEqual(len(r['provas']),60)
         self.assertTrue(all('1.500,00' in p['trecho'] for p in r['provas']))
+
+    def test_long_html_row_keeps_complete_literal_source(self):
+        r = report(); token = s._CURRENT.set(r)
+        text = ('Documento original ' * 130) + 'VALOR FINAL 1.500,00'
+        try: lineage.register_html('<table><tr><td>'+text+'</td></tr></table>')
+        finally: s._CURRENT.reset(token)
+        self.assertEqual(''.join(p['trecho'] for p in r['provas']), text)
 
     def test_connection_test_calls_three_agents_without_motor(self):
         with patch.object(team,'call_agent',side_effect=self.reviewer): r = team.connection_test()
