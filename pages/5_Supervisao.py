@@ -23,6 +23,8 @@ if st.button('Testar os três agentes', disabled=not configured()):
     except Exception as exc:
         st.error(str(exc))
 if st.session_state.get('teste_tres_agentes'):
+    result = st.session_state['teste_tres_agentes']
+    st.success(f"Conexão da API confirmada: {result.get('conexao_api', {}).get('respostas_validas', 0)}/3 respostas válidas. Este diagnóstico não certifica dados financeiros.")
     st.json(st.session_state['teste_tres_agentes'])
 st.caption('O teste dos três agentes consome três chamadas de diagnóstico; não inicia downloads nem altera planilhas.')
 st.json(status())
