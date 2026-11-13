@@ -111,8 +111,9 @@ def definition():
             'correcoes': 'Propostas rastreáveis; ambiguidades bloqueiam; IA não escreve diretamente.'}
 
 
-def output_schema(allowed):
-    refs = {'type': 'array', 'items': {'type': 'string', 'enum': sorted(allowed)}}
+def output_schema(allowed, choices=None):
+    refs = {'type': 'array', 'items': {'type': 'string', 'enum': sorted(allowed)}} if allowed else {
+        'type': 'array', 'items': {'type': 'string'}, 'maxItems': 0}
     finding = {'type': 'object', 'additionalProperties': False, 'properties': {
         'tipo': {'type': 'string', 'enum': ['MECANICO', 'CONCEITUAL', 'LACUNA']},
         'gravidade': {'type': 'string', 'enum': ['BAIXA', 'MEDIA', 'ALTA']},
@@ -126,6 +127,11 @@ def output_schema(allowed):
     props.update(veredito={'type': 'string', 'enum': ['APROVADO', 'REPROVADO', 'REVISAR']},
                  evidencias=refs, achados={'type': 'array', 'items': finding},
                  correcoes={'type': 'array', 'items': correction})
+    if choices is not None:
+        for name in ('achados', 'correcoes'):
+            ids = sorted(choices[name])
+            props[name] = ({'type': 'array', 'items': {'type': 'string', 'enum': ids}}
+                           if ids else {'type': 'array', 'items': {'type': 'string'}, 'maxItems': 0})
     return {'type': 'object', 'additionalProperties': False, 'properties': props, 'required': list(props)}
 
 
@@ -167,13 +173,34 @@ def validate_answer(answer, allowed):
 
 def call_agent(role, context, opinions, *, opener=None):
     allowed = {context['id']} | {p['id'] for p in context.get('provas', [])}
-    schema = output_schema(allowed)
+    choices = None
+    if role == 'COORDENADOR':
+        choices = {'achados': {}, 'correcoes': {}}
+        admitted = set()
+        for entry in opinions.values():
+            previous = entry['parecer']
+            admitted.update(previous['evidencias'])
+            for name in choices:
+                for item in previous[name]:
+                    identifier = name[:-1] + '-' + hashlib.sha256(json.dumps(item, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:20]
+                    choices[name][identifier] = item
+                    admitted.update(item['evidencias'])
+        allowed &= admitted
+    schema = output_schema(allowed, choices)
     spec = ROLES[role]
     instructions = (COMMON + '\nIDENTIDADE: ' + spec['identidade'] + '\nPERSONALIDADE: '
                     + spec['personalidade'] + '\nTAREFA: ' + spec['tarefas'][context['servico']]
                     + '\nREGRA: ' + spec['regra'] + '\nÓRGÃO: '
                     + MODULE_RULES.get(context['fonte'], MODULE_RULES['GERAL']))
     body = {'contexto': context, 'pareceres_anteriores': opinions}
+    if choices is not None:
+        body['catalogo_de_decisoes'] = choices
+        instructions += '\nEm achados e correcoes, retorne somente os IDs do catálogo de decisões. '
+        instructions += 'Não reescreva os objetos. Sem opções, devolva lista vazia. Não acrescente argumentos.'
+    if context.get('operacao') == 'teste_conexao_tres_agentes':
+        instructions += ('\nDIAGNÓSTICO DE CONEXÃO: o único objetivo é confirmar que você recebeu este registro '
+            'e retornou uma resposta válida. Não há documento financeiro para analisar nem correção a propor. '
+            'Não exigir documentos, downloads ou planilhas neste diagnóstico. Não certificar nenhuma receita.')
     encoded = json.dumps(body, ensure_ascii=False, allow_nan=False)
     if len(encoded) > 55000:
         raise SupervisorBlocked('EVIDENCIA_EXCEDE_LIMITE: nenhuma prova foi omitida para aprovação.')
@@ -205,7 +232,15 @@ def call_agent(role, context, opinions, *, opener=None):
     if result.get('status') != 'completed' or not text:
         raise SupervisorBlocked('RESPOSTA_INCOMPLETA: equipe não liberou a etapa.')
     try:
-        answer = validate_answer(json.loads(text), allowed)
+        answer = json.loads(text)
+        if choices is not None:
+            for name in choices:
+                selections = answer.get(name)
+                if (not isinstance(selections, list) or
+                        any(not isinstance(identifier, str) or identifier not in choices[name] for identifier in selections)):
+                    raise SupervisorBlocked('COORDENADOR_ESCOLHA_INVALIDA: somente propostas catalogadas podem ser julgadas.')
+                answer[name] = [copy.deepcopy(choices[name][identifier]) for identifier in selections]
+        answer = validate_answer(answer, allowed)
     except (ValueError, TypeError, KeyError) as exc:
         if isinstance(exc, SupervisorBlocked):
             raise
@@ -285,8 +320,9 @@ def connection_test():
         report.update(status='CONCLUIDO' if answer['prioridade'] == 'normal' else 'PENDENTE',
                       resultado=answer)
         return report
-    except Exception:
+    except Exception as exc:
         report['status'] = 'BLOQUEADO'
+        report['erro'] = redact(str(exc))
         raise
     finally:
         report['finalizado_em'] = datetime.now(timezone.utc).isoformat()
