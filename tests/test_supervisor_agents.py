@@ -391,4 +391,19 @@ class AvailableModelsTests(unittest.TestCase):
         self.assertNotIn('private-secret', str(error.exception))
 
 
+class LegacySnapshotTests(unittest.TestCase):
+    def test_snapshot_preserves_bounded_reasoning_and_json_contract(self):
+        sent = []
+        def opener(request, timeout):
+            sent.append(json.loads(request.data))
+            answer = {'veredito': 'APROVADO', 'justificativa': 'Teste', 'proximo_passo': 'Prosseguir', 'evidencias': ['operation-1'], 'achados': [], 'correcoes': []}
+            return io.BytesIO(json.dumps({'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': json.dumps(answer)}]}]}).encode())
+        context = {'id': 'operation-1', 'servico': 'BUSCAR', 'fonte': 'BB', 'fase': 'ANTES', 'provas': []}
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy-only-offline', 'SUPERVISOR_OPENAI_MODEL': 'gpt-5-mini-2025-08-07'}), patch.object(team, 'reserve_ai_call'):
+            team.call_agent('TECNICO', context, {}, opener=opener)
+        self.assertEqual(sent[0]['model'], 'gpt-5-mini-2025-08-07')
+        self.assertEqual(sent[0]['reasoning'], {'effort': 'minimal'})
+        self.assertTrue(sent[0]['text']['format']['strict'])
+
+
 if __name__ == '__main__': unittest.main()

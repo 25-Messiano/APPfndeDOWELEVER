@@ -278,7 +278,7 @@ def call_agent(role, context, opinions, *, opener=None):
                                    'strict': True, 'schema': schema}}}
     # Preserve the existing app's bounded reasoning setting for its default family.
     # Other configured models do not receive an unsupported reasoning parameter.
-    if payload['model'] in {'gpt-5', 'gpt-5-mini', 'gpt-5-nano'}:
+    if payload['model'] in {'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5-mini-2025-08-07'}:
         payload['reasoning'] = {'effort': 'minimal'}
     req = urllib.request.Request('https://api.openai.com/v1/responses',
         data=json.dumps(payload, ensure_ascii=False).encode(), method='POST',

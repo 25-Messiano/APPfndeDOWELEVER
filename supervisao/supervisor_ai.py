@@ -69,7 +69,7 @@ def advise(question, reports, *, opener=None, automatic=False):
         "max_output_tokens":1000,
         "store":False,
     }
-    if model in {"gpt-5", "gpt-5-mini", "gpt-5-nano"}:
+    if model in {"gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-mini-2025-08-07"}:
         payload["reasoning"] = {"effort": "minimal"}
     request=urllib.request.Request(
         "https://api.openai.com/v1/responses",
