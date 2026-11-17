@@ -372,4 +372,23 @@ class ApiDiagnosticsTests(unittest.TestCase):
                 team.call_agent('TECNICO', context, {}, opener=fail)
 
 
+class AvailableModelsTests(unittest.TestCase):
+    def test_lists_only_safe_ids_without_model_execution(self):
+        calls = []
+        def opener(request, timeout):
+            calls.append(request.get_method())
+            return io.BytesIO(json.dumps({'data': [{'id': 'gpt-6.1-terra'}, {'id': 'gpt-6.1-terra'}, {'id': 'gpt-bad\nsecret'}, {'id': 'whisper-1'}, None]}).encode())
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy-only-offline'}):
+            self.assertEqual(team.available_models(opener=opener), ['gpt-6.1-terra'])
+        self.assertEqual(calls, ['GET'])
+
+    def test_failed_model_listing_never_exposes_response(self):
+        def opener(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, 403, 'failure', {}, io.BytesIO(b'private-secret'))
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy-only-offline'}):
+            with self.assertRaises(s.SupervisorBlocked) as error:
+                team.available_models(opener=opener)
+        self.assertNotIn('private-secret', str(error.exception))
+
+
 if __name__ == '__main__': unittest.main()

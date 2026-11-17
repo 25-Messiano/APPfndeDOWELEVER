@@ -104,6 +104,28 @@ def stage_for(operation):
 
 
 
+def available_models(*, opener=None):
+    """Diagnóstico somente leitura; nunca escolhe nem executa outro modelo."""
+    request = urllib.request.Request('https://api.openai.com/v1/models',
+        headers={'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY']}, method='GET')
+    try:
+        with (opener or urllib.request.urlopen)(request, timeout=20) as response:
+            payload = json.loads(response.read(2000000))
+    except urllib.error.HTTPError as exc:
+        raise SupervisorBlocked(f'LISTA_MODELOS_HTTP_{exc.code}: consulta indisponível.') from None
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        raise SupervisorBlocked('LISTA_MODELOS_INDISPONIVEL: consulta não concluída.') from None
+    if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
+        raise SupervisorBlocked('LISTA_MODELOS_INVALIDA: formato não reconhecido.')
+    models = set()
+    for item in payload['data']:
+        identifier = item.get('id') if isinstance(item, dict) else None
+        if (isinstance(identifier, str) and identifier.startswith('gpt-') and len(identifier) <= 120
+                and all(c in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._:' for c in identifier)):
+            models.add(identifier)
+    return sorted(models)[:60]
+
+
 def configured_model():
     model = os.getenv('SUPERVISOR_OPENAI_MODEL', 'gpt-5-mini').strip()
     if not model or len(model) > 120 or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._:' for c in model):
@@ -373,6 +395,14 @@ def connection_test():
     except Exception as exc:
         report['status'] = 'BLOQUEADO'
         report['erro'] = redact(str(exc))
+        if 'model_not_found' in report['erro']:
+            try:
+                report['modelos_disponiveis'] = available_models()
+            except Exception as model_error:
+                report['diagnostico_modelos'] = redact(str(model_error))
+            if report.get('modelos_disponiveis'):
+                raise SupervisorBlocked(report['erro'] + ' Modelos disponíveis nesta conta: '
+                                        + ', '.join(report['modelos_disponiveis'])) from None
         raise
     finally:
         report['finalizado_em'] = datetime.now(timezone.utc).isoformat()
