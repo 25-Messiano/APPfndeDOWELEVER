@@ -19,3 +19,13 @@ class ReferenceSchemaTests(unittest.TestCase):
   answer={'veredito':'APROVADO','justificativa':'Contrato','proximo_passo':'Executar','evidencias':[],'achados':[],'correcoes':[]}
   with self.assertRaisesRegex(SupervisorBlocked,'APROVACAO_SEM_PROVA'):
    team.validate_answer(answer,{'operation-1'})
+
+ def test_schema_matches_validator_text_and_list_bounds(self):
+  schema=team.output_schema({'operation-1'})['properties']
+  for key in ('justificativa','proximo_passo'):
+   self.assertEqual(schema[key]['maxLength'],1200)
+  for key in ('achados','correcoes'):
+   self.assertEqual(schema[key]['maxItems'],100)
+   for field, spec in schema[key]['items']['properties'].items():
+    if spec.get('type')=='string' and 'enum' not in spec:
+     self.assertEqual(spec['maxLength'],1200)

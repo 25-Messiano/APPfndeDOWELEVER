@@ -174,20 +174,20 @@ def output_schema(allowed, choices=None):
     finding = {'type': 'object', 'additionalProperties': False, 'properties': {
         'tipo': {'type': 'string', 'enum': ['MECANICO', 'CONCEITUAL', 'LACUNA']},
         'gravidade': {'type': 'string', 'enum': ['BAIXA', 'MEDIA', 'ALTA']},
-        'descricao': {'type': 'string'}, 'evidencias': refs},
+        'descricao': {'type': 'string', 'maxLength': 1200}, 'evidencias': refs},
         'required': ['tipo', 'gravidade', 'descricao', 'evidencias']}
     correction = {'type': 'object', 'additionalProperties': False, 'properties': {
-        'campo': {'type': 'string'}, 'antes': {'type': 'string'}, 'depois': {'type': 'string'},
-        'regra': {'type': 'string'}, 'evidencias': refs},
+        'campo': {'type': 'string', 'maxLength': 1200}, 'antes': {'type': 'string', 'maxLength': 1200}, 'depois': {'type': 'string', 'maxLength': 1200},
+        'regra': {'type': 'string', 'maxLength': 1200}, 'evidencias': refs},
         'required': ['campo', 'antes', 'depois', 'regra', 'evidencias']}
-    props = {k: {'type': 'string'} for k in ('justificativa', 'proximo_passo')}
+    props = {k: {'type': 'string', 'maxLength': 1200} for k in ('justificativa', 'proximo_passo')}
     props.update(veredito={'type': 'string', 'enum': ['APROVADO', 'REPROVADO', 'REVISAR']},
-                 evidencias=refs, achados={'type': 'array', 'items': finding},
-                 correcoes={'type': 'array', 'items': correction})
+                 evidencias=refs, achados={'type': 'array', 'maxItems': 100, 'items': finding},
+                 correcoes={'type': 'array', 'maxItems': 100, 'items': correction})
     if choices is not None:
         for name in ('achados', 'correcoes'):
             ids = sorted(choices[name])
-            props[name] = ({'type': 'array', 'items': {'type': 'string', 'enum': ids}}
+            props[name] = ({'type': 'array', 'maxItems': 100, 'items': {'type': 'string', 'enum': ids}}
                            if ids else {'type': 'array', 'items': {'type': 'string'}, 'maxItems': 0})
     return {'type': 'object', 'additionalProperties': False, 'properties': props, 'required': list(props)}
 
