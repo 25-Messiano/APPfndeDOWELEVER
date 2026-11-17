@@ -58,16 +58,19 @@ def advise(question, reports, *, opener=None, automatic=False):
         evidence_schema["items"]["enum"] = sorted(allowed)
     else:
         evidence_schema["maxItems"] = 0
+    from .supervisor_agents import configured_model
+    model = configured_model()
     payload={
-        "model":os.getenv("SUPERVISOR_OPENAI_MODEL","gpt-5-mini"),
+        "model":model,
         "instructions":INSTRUCTIONS,
         "input":json.dumps({"pergunta":question,"registros":context,
                             "ids_de_evidencias_permitidos":sorted(allowed)},ensure_ascii=False),
         "text":{"format":{"type":"json_schema","name":"orientacao_supervisor","strict":True,"schema":schema}},
         "max_output_tokens":1000,
-        "reasoning":{"effort":"minimal"},
         "store":False,
     }
+    if model in {"gpt-5", "gpt-5-mini", "gpt-5-nano"}:
+        payload["reasoning"] = {"effort": "minimal"}
     request=urllib.request.Request(
         "https://api.openai.com/v1/responses",
         data=json.dumps(payload).encode(),
@@ -77,17 +80,8 @@ def advise(question, reports, *, opener=None, automatic=False):
         with (opener or urllib.request.urlopen)(request,timeout=45) as response:
             data=json.load(response)
     except urllib.error.HTTPError as exc:
-        try: code=json.loads(exc.read()).get("error",{}).get("code")
-        except Exception: code=None
-        if code in {"insufficient_quota", "credit_balance_exhausted", "billing_hard_limit_reached"}:
-            message="A API esta sem saldo ou atingiu o limite de uso configurado."
-        elif exc.code==429:
-            message="A API atingiu o limite de requisicoes. Aguarde e tente novamente."
-        elif exc.code in {401,403}:
-            message="A chave da API precisa ser conferida na configuracao do Render."
-        else:
-            message="A API nao concluiu a orientacao. As validacoes do motor continuam ativas."
-        raise SupervisorBlocked(message) from None
+        from .supervisor_agents import api_error_message
+        raise SupervisorBlocked(api_error_message(exc, model)) from None
     except (urllib.error.URLError,TimeoutError):
         raise SupervisorBlocked("A conexao com a orientacao por IA nao respondeu. Tente novamente.") from None
     text="".join(c.get("text","") for item in data.get("output",[])
