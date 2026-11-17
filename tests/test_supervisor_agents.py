@@ -324,4 +324,52 @@ class TeamTests(unittest.TestCase):
         self.assertFalse(r['conexao_api']['validacao_financeira_executada'])
 
 
+
+class ApiDiagnosticsTests(unittest.TestCase):
+    def error(self, status, code=None, message='private-data sk-never-display-this'):
+        return urllib.error.HTTPError('https://api.openai.com/v1/responses', status, 'failure', {},
+            io.BytesIO(json.dumps({'error': {'code': code, 'message': message}}).encode()))
+
+    def test_404_model_not_found_is_not_reported_as_billing(self):
+        message = team.api_error_message(self.error(404, 'model_not_found'), 'gpt-5-mini')
+        self.assertIn('model_not_found', message)
+        self.assertIn('gpt-5-mini', message)
+        self.assertNotIn('saldo', message)
+        self.assertNotIn('sk-never', message)
+
+    def test_429_quota_is_distinct_from_rate_limit(self):
+        quota = team.api_error_message(self.error(429, 'insufficient_quota'), 'gpt-5-mini')
+        rate = team.api_error_message(self.error(429, 'rate_limit_exceeded'), 'gpt-5-mini')
+        self.assertIn('créditos', quota)
+        self.assertIn('limite de requisições', rate)
+        self.assertNotIn('créditos', rate)
+
+    def test_non_json_and_untrusted_error_codes_do_not_leak(self):
+        for body in [b'<html>sk-never-display-this</html>', json.dumps({'error': {'code': 'sk-never-display-this'}}).encode(), b'[]']:
+            error = urllib.error.HTTPError('https://api.openai.com/v1/responses', 404, 'failure', {}, io.BytesIO(body))
+            self.assertNotIn('sk-never', team.api_error_message(error, 'gpt-5-mini'))
+
+    def test_auth_errors_are_not_reported_as_billing(self):
+        for status in [401, 403]:
+            message = team.api_error_message(self.error(status), 'gpt-5-mini')
+            self.assertIn('permissões', message)
+            self.assertNotIn('saldo', message)
+
+    def test_model_normalization_and_rejection(self):
+        with patch.dict(os.environ, {'SUPERVISOR_OPENAI_MODEL': ' gpt-5-mini '}):
+            self.assertEqual(team.configured_model(), 'gpt-5-mini')
+        for value in ['', ' ', 'bad\nmodel']:
+            with patch.dict(os.environ, {'SUPERVISOR_OPENAI_MODEL': value}):
+                with self.assertRaisesRegex(s.SupervisorBlocked, 'MODELO_INVALIDO'):
+                    team.configured_model()
+
+    def test_call_agent_propagates_safe_diagnostic_and_stays_blocked(self):
+        context = {'id': 'operation-1', 'servico': 'BUSCAR', 'fonte': 'BB', 'fase': 'ANTES', 'provas': []}
+        def fail(request, timeout):
+            raise self.error(404, 'model_not_found')
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy-only-offline', 'SUPERVISOR_OPENAI_MODEL': 'gpt-5-mini'}), patch.object(team, 'reserve_ai_call'):
+            with self.assertRaisesRegex(s.SupervisorBlocked, 'model_not_found'):
+                team.call_agent('TECNICO', context, {}, opener=fail)
+
+
 if __name__ == '__main__': unittest.main()

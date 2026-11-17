@@ -103,9 +103,44 @@ def stage_for(operation):
     return 'PROCESSAR'
 
 
+
+def configured_model():
+    model = os.getenv('SUPERVISOR_OPENAI_MODEL', 'gpt-5-mini').strip()
+    if not model or len(model) > 120 or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._:' for c in model):
+        raise SupervisorBlocked('MODELO_INVALIDO: confira SUPERVISOR_OPENAI_MODEL no Render.')
+    return model
+
+
+def api_error_message(exc, model):
+    """Use somente códigos conhecidos; nunca exponha corpo, mensagem ou cabeçalhos da API."""
+    code = None
+    try:
+        body = json.loads(exc.read(8192))
+        error = body.get('error') if isinstance(body, dict) else None
+        candidate = error.get('code') if isinstance(error, dict) else None
+        if isinstance(candidate, str):
+            code = candidate
+    except Exception:
+        pass
+    prefix = f'API_INDISPONIVEL_HTTP_{exc.code}: '
+    if code == 'model_not_found':
+        return prefix + f'model_not_found; modelo {model} inexistente ou indisponível para esta chave/projeto. Confira o modelo e o acesso do projeto na OpenAI.'
+    if code in {'insufficient_quota', 'credit_balance_exhausted', 'billing_hard_limit_reached', 'organization_usage_limit_exceeded'}:
+        return prefix + code + '; confira créditos e cota da organização/projeto da API.'
+    if exc.code == 404:
+        return prefix + f'recurso ou modelo {model} não encontrado ou indisponível para esta chave/projeto; a API não informou um código reconhecido. Não foi confirmado problema de saldo.'
+    if exc.code in {401, 403}:
+        return prefix + 'confira a validade da chave e as permissões do projeto e do modelo na OpenAI.'
+    if exc.code == 429:
+        return prefix + 'limite de requisições ou cota; a API não informou um código reconhecido. Confira os limites do projeto antes de repetir.'
+    if exc.code == 400:
+        return prefix + f'requisição incompatível; confira os parâmetros aceitos pelo modelo {model}.'
+    return prefix + 'falha da API; equipe pausada. Consulte o estado do serviço e tente novamente posteriormente.'
+
+
 def definition():
     return {'versao': VERSION, 'habilitada': enabled(), 'mesma_chave': True,
-            'modelo': os.getenv('SUPERVISOR_OPENAI_MODEL', 'gpt-5-mini'),
+            'modelo': configured_model(),
             'etapas': list(STAGES), 'agentes': copy.deepcopy(ROLES),
             'planilhas': 'Preservar estrutura e aparência; auditoria separada; sem pintura.',
             'correcoes': 'Propostas rastreáveis; ambiguidades bloqueiam; IA não escreve diretamente.'}
@@ -212,8 +247,9 @@ def call_agent(role, context, opinions, *, opener=None):
         raise SupervisorBlocked('EVIDENCIA_EXCEDE_LIMITE: nenhuma prova foi omitida para aprovação.')
     if not os.getenv('OPENAI_API_KEY', '').strip():
         raise SupervisorBlocked('PAUSADO_SEM_CHAVE: API não configurada neste serviço.')
+    model = configured_model()
     reserve_ai_call(automatic=True)
-    payload = {'model': os.getenv('SUPERVISOR_OPENAI_MODEL', 'gpt-5-mini'),
+    payload = {'model': model,
                'instructions': instructions, 'input': encoded, 'store': False,
                'max_output_tokens': 2500,
                'text': {'format': {'type': 'json_schema', 'name': 'parecer_' + role.lower(),
@@ -229,8 +265,7 @@ def call_agent(role, context, opinions, *, opener=None):
         with (opener or urllib.request.urlopen)(req, timeout=60) as response:
             result = json.load(response)
     except urllib.error.HTTPError as exc:
-        # Não incorporar corpo HTTP: pode conter dados sensíveis ou HTML não confiável.
-        raise SupervisorBlocked(f'API_INDISPONIVEL_HTTP_{exc.code}: equipe pausada; conferir saldo, acesso ou limite.') from None
+        raise SupervisorBlocked(api_error_message(exc, model)) from None
     except (urllib.error.URLError, TimeoutError):
         raise SupervisorBlocked('API_INDISPONIVEL: equipe pausada por falha de conexão.') from None
     text = ''.join(c.get('text', '') for item in result.get('output', [])
