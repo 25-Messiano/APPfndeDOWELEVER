@@ -12,12 +12,17 @@ def status():
     from .supervisor_agents import definition
     with _PAUSE_LOCK:
         paused=_PAUSE_STATE['until']>time.monotonic()
-        return {'automatica':enabled(),'chave_configurada':supervisor_ai.configured(),'modo':'OBRIGATORIO_POR_ETAPA','api_em_pausa':paused,'motivo':_PAUSE_STATE['reason'] if paused else '', 'equipe': definition()}
+        return {'automatica':enabled(),'chave_configurada':supervisor_ai.configured(),'modo':'OBRIGATORIO_NO_PROCESSAMENTO','downloads_supervisionados_por_ia':False,'validacoes_tecnicas_download':True,'api_em_pausa':paused,'motivo':_PAUSE_STATE['reason'] if paused else '', 'equipe': definition()}
 
 def enabled():
     return os.getenv('SUPERVISOR_AUTO_AI','true').strip().lower() in {'1','true','yes','on'}
 
 def review_stage(report,phase):
+    # Download integrity remains enforced by the supervisor's pre/postflight guards.
+    # This must precede API-key, recursion and API-pause checks.
+    if report.get('revisao_ia_obrigatoria') is False:
+        report.setdefault('orientacao_automatica',{})[phase]={'status':'DISPENSADA_DOWNLOAD','motivo':'Download com validacoes tecnicas; IA reservada ao processamento.'}
+        return
     if _ACTIVE.get():
         raise SupervisorAIPaused('PAUSADO_IA: chamada recursiva de supervisao bloqueada.')
     if not enabled():

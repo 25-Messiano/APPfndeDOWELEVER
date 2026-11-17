@@ -26,7 +26,7 @@ class FndeSupervisionTests(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
-    def test_all_fnde_stages_have_automatic_supervision(self):
+    def test_all_fnde_stages_have_technical_supervision(self):
         wanted = {
             "core/downloader.py": {"baixar_fnde", "baixar_fnde_municipio_completo"},
             "core/validacao_html.py": {"validar_html"},
@@ -63,16 +63,15 @@ class FndeSupervisionTests(unittest.TestCase):
             ns["consultar"](source, ano=2026, uf="BA", ibge="2902104")
         self.assertEqual(session.get.call_count, 1)
 
-    def test_no_key_blocks_storage_before_any_side_effect(self):
+    def test_no_key_allows_original_file_storage(self):
         tree = ast.parse((ROOT / "cloud/storage.py").read_text())
         ns = {"__name__": "isolated_storage"}
         exec(compile(tree, "storage-real", "exec"), ns)
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
-            with self.assertRaises(s.SupervisorAIPaused):
-                ns["salvar"](Path("arquivo.pdf"))
+            self.assertEqual(ns["salvar"](Path("arquivo.pdf")), "arquivo.pdf")
         report = s.recent_reports()[0]
         self.assertEqual(report["operacao"], "armazenar_arquivo")
-        self.assertEqual(report["orientacao_automatica"]["ANTES"]["status"], "PAUSADO_SEM_CHAVE")
+        self.assertEqual(report["orientacao_automatica"]["ANTES"]["status"], "DISPENSADA_DOWNLOAD")
 
     def test_financial_summary_preserves_values_without_raw_document(self):
         summary = s._summary([{"programa": "PNAE", "total": 123.45, "html": "SEGREDO"}])

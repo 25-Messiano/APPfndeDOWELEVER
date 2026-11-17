@@ -4,7 +4,7 @@ from supervisao.supervisor import supervised
 MARCADORES = ["FNDE", "LIBERA", "MUNIC", "ENTIDADE", "PROGRAMA", "VALOR"]
 
 
-@supervised("FNDE", "validar_html")
+@supervised("FNDE", "validar_html", ai_review=False)
 def validar_html(html: str) -> dict:
     texto = BeautifulSoup(html or "", "html.parser").get_text(" ", strip=True)
     texto_up = texto.upper()

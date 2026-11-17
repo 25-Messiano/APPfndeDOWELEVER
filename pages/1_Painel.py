@@ -11,9 +11,9 @@ st.title("Painel FNDE")
 st.caption("Consulta municipal completa, auditoria e PDF textual no padrão visual FNDE/SIGEF.")
 supervisao = supervisor_status()
 if supervisao["automatica"]:
-    st.info("A IA confere cada etapa. Sem acesso ou saldo na API, a operação pausa para conferência.")
+    st.info("Downloads usam validações técnicas e não dependem da IA. Os três agentes conferem a extração de dados e o preenchimento das planilhas.")
     if not supervisao["chave_configurada"]:
-        st.warning("PAUSADO POR IA: configure a chave da API neste serviço do Render.")
+        st.warning("Processamento por IA pausado: configure a chave da API. Downloads continuam disponíveis.")
 else:
     st.warning("Supervisão por IA desativada neste serviço.")
 

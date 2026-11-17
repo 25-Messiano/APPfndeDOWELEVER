@@ -280,7 +280,7 @@ def _postflight(result, arguments, guard):
         validate_archive(result[0], workbook=True)
 
 
-def supervised(source, operation, guard=None):
+def supervised(source, operation, guard=None, *, ai_review=True):
     """Envolve as funcoes reais, preservando assinaturas e excecoes originais."""
     def decorate(func):
         signature = inspect.signature(func)
@@ -297,6 +297,9 @@ def supervised(source, operation, guard=None):
                       "fonte": chosen, "operacao": operation, "identidade": _identity(arguments),
                       "status": "EXECUTANDO", "iniciado_em": datetime.now(timezone.utc).isoformat(),
                       "etapas": [], "auditoria_cloud": "PENDENTE"}
+            # Download scope propagates to nested helpers, then resets with the context.
+            report["revisao_ia_obrigatoria"] = bool(ai_review) and (parent is None or parent.get("revisao_ia_obrigatoria", True))
+            report["escopo_supervisao"] = "PROCESSAMENTO" if report["revisao_ia_obrigatoria"] else "DOWNLOAD_VALIDACAO_TECNICA"
             token = _CURRENT.set(report)
             started = time.monotonic()
             try:

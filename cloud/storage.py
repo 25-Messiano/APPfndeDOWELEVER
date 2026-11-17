@@ -7,7 +7,7 @@ def salvar_local(origem: Path) -> str:
     return str(origem)
 
 
-@supervised("FNDE", "armazenar_arquivo")
+@supervised("FNDE", "armazenar_arquivo", ai_review=False)
 def salvar(origem: Path) -> str:
     backend = os.getenv("STORAGE_BACKEND", "local").lower()
     if backend == "s3":

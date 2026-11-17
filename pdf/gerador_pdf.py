@@ -73,7 +73,7 @@ def _reportlab_pdf(*, ibge, municipio, uf, ano, programas, destino: Path):
     doc.build(story)
 
 
-@supervised("FNDE", "gerar_pdf")
+@supervised("FNDE", "gerar_pdf", ai_review=False)
 def gerar_pdf(*, ibge, municipio, uf, ano, programas, destino):
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -94,7 +94,7 @@ def gerar_pdf(*, ibge, municipio, uf, ano, programas, destino):
     return {"arquivo": str(destino), "engine": usado, "erro_playwright": erro_playwright, "html": html}
 
 
-@supervised("FNDE", "validar_pdf_textual")
+@supervised("FNDE", "validar_pdf_textual", ai_review=False)
 def validar_pdf_textual(caminho: str, termos=None):
     from pypdf import PdfReader
     reader = PdfReader(caminho)

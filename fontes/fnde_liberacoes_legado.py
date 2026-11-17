@@ -286,7 +286,7 @@ class FndeLiberacoesLegado:
             "p_verifica": "sigef",
         }
 
-    @supervised("FNDE", "consultar_liberacoes")
+    @supervised("FNDE", "consultar_liberacoes", ai_review=False)
     def consultar(self, *, ano, uf, ibge=None, cnpj=None, municipio="", programa="", tp_entidade=""):
         params = self._params(ano, uf, ibge, cnpj, programa, tp_entidade)
         tentativas = []
@@ -322,14 +322,14 @@ class FndeLiberacoesLegado:
                 log(f"erro endpoint={endpoint} erro={ultimo_erro}")
         return {"ok": False, "erro": ultimo_erro or "Nenhum endpoint retornou HTML validado", "tentativas": tentativas}
 
-    @supervised("FNDE", "entregar_html")
+    @supervised("FNDE", "entregar_html", ai_review=False)
     def _salvar_html(self, html: str, nome: str):
         arq = DOWNLOADS / nome
         arq.write_text(html, encoding="utf-8")
         salvar_storage(arq)
         return arq
 
-    @supervised("FNDE", "coletar_entidades_e_pacote")
+    @supervised("FNDE", "coletar_entidades_e_pacote", ai_review=False)
     def baixar_municipio_completo(self, *, ano, uf, ibge, municipio):
         """Baixa o resumo municipal e percorre programa/tipo/entidade encontrados.
 
@@ -473,7 +473,7 @@ class FndeLiberacoesLegado:
             "diagnostico": {"pdf_engine": pdf_info.get("engine"), "pdf_erro_playwright": pdf_info.get("erro_playwright"), "pdf_validacao": {k:v for k,v in pdf_validacao.items() if k != "texto"}},
         }
 
-    @supervised("FNDE", "coletar_liberacoes")
+    @supervised("FNDE", "coletar_liberacoes", ai_review=False)
     def baixar(self, *, ano, uf, ibge, municipio, cnpj=None):
         # CNPJ informado mantem compatibilidade com a versao antiga; vazio usa municipio completo.
         if not limpar_cnpj(cnpj):
