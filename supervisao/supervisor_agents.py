@@ -271,7 +271,8 @@ def call_agent(role, context, opinions, *, opener=None):
             'e retornou uma resposta válida. Não há documento financeiro para analisar nem correção a propor. '
             'Não exigir documentos, downloads ou planilhas neste diagnóstico. Não certificar nenhuma receita.')
     encoded = json.dumps(body, ensure_ascii=False, allow_nan=False)
-    if len(encoded) > 55000:
+    context_limit = 250000 if context.get('provas') else 55000
+    if len(encoded) > context_limit:
         raise SupervisorBlocked('EVIDENCIA_EXCEDE_LIMITE: nenhuma prova foi omitida para aprovação.')
     if not os.getenv('OPENAI_API_KEY', '').strip():
         raise SupervisorBlocked('PAUSADO_SEM_CHAVE: API não configurada neste serviço.')

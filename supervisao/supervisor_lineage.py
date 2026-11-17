@@ -12,7 +12,7 @@ def add_proof(*, documento, sha256, local, trecho, campo=None, valor=None, tipo=
     import os
     from .supervisor_agents import enabled
     report = _CURRENT.get()
-    if (report is None or not enabled() or
+    if (report is None or report.get('revisao_ia_obrigatoria') is False or not enabled() or
             os.getenv('SUPERVISOR_AUTO_AI', 'true').strip().lower() not in {'1', 'true', 'yes', 'on'}):
         return None
     if not re.fullmatch(r'[a-f0-9]{64}', str(sha256)):
@@ -41,7 +41,7 @@ def register_pdf(pdf_bytes, name='documento.pdf'):
     """Segunda leitura textual, com página e linhas, para os revisores independentes."""
     import os
     from .supervisor_agents import enabled
-    if (_CURRENT.get() is None or not enabled() or
+    if (_CURRENT.get() is None or _CURRENT.get().get('revisao_ia_obrigatoria') is False or not enabled() or
             os.getenv('SUPERVISOR_AUTO_AI', 'true').strip().lower() not in {'1', 'true', 'yes', 'on'}):
         return []
     from pypdf import PdfReader
@@ -69,7 +69,7 @@ def register_pdf(pdf_bytes, name='documento.pdf'):
 def register_html(html, name='FNDE.html'):
     import os
     from .supervisor_agents import enabled
-    if (_CURRENT.get() is None or not enabled() or
+    if (_CURRENT.get() is None or _CURRENT.get().get('revisao_ia_obrigatoria') is False or not enabled() or
             os.getenv('SUPERVISOR_AUTO_AI', 'true').strip().lower() not in {'1', 'true', 'yes', 'on'}):
         return []
     from bs4 import BeautifulSoup
