@@ -169,7 +169,7 @@ def definition():
 
 
 def output_schema(allowed, choices=None):
-    refs = {'type': 'array', 'items': {'type': 'string', 'enum': sorted(allowed)}} if allowed else {
+    refs = {'type': 'array', 'minItems': 1, 'items': {'type': 'string', 'enum': sorted(allowed)}} if allowed else {
         'type': 'array', 'items': {'type': 'string'}, 'maxItems': 0}
     finding = {'type': 'object', 'additionalProperties': False, 'properties': {
         'tipo': {'type': 'string', 'enum': ['MECANICO', 'CONCEITUAL', 'LACUNA']},
@@ -249,12 +249,18 @@ def call_agent(role, context, opinions, *, opener=None):
                     + spec['personalidade'] + '\nTAREFA: ' + spec['tarefas'][context['servico']]
                     + '\nREGRA: ' + spec['regra'] + '\nÓRGÃO: '
                     + MODULE_RULES.get(context['fonte'], MODULE_RULES['GERAL']))
+    instructions += ('\nREFERÊNCIAS: evidencias deve conter ao menos um ID fornecido no contexto. '
+                     'Cite contexto.id para fatos do contrato ou lacunas do próprio registro; '
+                     'cite IDs de provas para conteúdo documental. Nunca invente uma referência. '
+                     'Citar o contrato não comprova valores nem conteúdo financeiro.')
     if context.get('fase') == 'ANTES':
         instructions = ('FASE PRÉ-EXECUÇÃO: julgue somente o contrato prévio e as entradas informadas. '
             'Resultado final e etapas futuras ainda não existem. Ausência de resultado posterior, '
             'por si só, NÃO é erro, lacuna ou divergência conceitual. Não exija resultados de um '
             'processo ainda não executado. APROVADO nesta fase apenas permite executar a etapa; '
-            'não certifica conteúdo futuro. Bloqueie somente inconsistência concreta nas entradas.\n' + instructions)
+            'não certifica conteúdo futuro. Para avaliar o contrato prévio, cite contexto.id; '
+            'isso não exige prova documental de um resultado que ainda será produzido. '
+            'Bloqueie somente inconsistência concreta nas entradas.\n' + instructions)
     body = {'contexto': context, 'pareceres_anteriores': opinions}
     if choices is not None:
         body['catalogo_de_decisoes'] = choices
