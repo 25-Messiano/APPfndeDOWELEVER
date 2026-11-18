@@ -83,6 +83,8 @@ Correção MECANICA precisa de prova literal; CONCEITUAL ou fonte inconsistente 
 Correções são propostas, jamais gravações realizadas. Preserve macros, fórmulas, abas, colunas,
 estilos e tabelas dinâmicas. Não pintar células nem acrescentar abas. Motores fazem cálculos e escrita.
 Toda correção deve ter antes/depois, campo, regra e evidência. Sem prova, REVISAR.
+Confirmação de valor correto, antes igual a depois ou cuidado genérico não é correção.
+Só preencha correcoes para uma alteração concreta comprovada; valores conferidos sem alteração deixam correcoes vazia.
 Erros ou pendências comprovados não podem receber APROVADO. Temperatura/consenso não são evidência.
 APROVADO refere-se apenas à etapa, fase e escopo recebidos, nunca automaticamente ao ano inteiro.
 '''
